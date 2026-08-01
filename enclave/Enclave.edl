@@ -1,0 +1,73 @@
+enclave {
+    include "common/entry_t.h"
+    include "common/ecall_types.h"
+
+    from "sgx_tstdc.edl" import *;
+
+    trusted {
+        /*
+         * ecall_run_join — the one big ecall.
+         *
+         * Inputs:
+         *   table_data[]   : all encrypted entry_t rows, tables concatenated
+         *   table_descs[]  : one table_desc_t per table
+         *   join_tree[]    : serialised join tree (post-order, leaves first)
+         *   out_cols[]     : columns to project into the result
+         *
+         * Output:
+         *   result_count   : number of result rows streamed via ocall_stream_result
+         *
+         * The enclave decrypts all rows, runs the full join pipeline, and delivers
+         * result rows in chunks through ocall_stream_result.
+         */
+        public sgx_status_t ecall_run_join(
+            [in, count=total_rows]   const entry_t*          table_data,
+            size_t                                            total_rows,
+            [in, count=num_tables]   const table_desc_t*     table_descs,
+            size_t                                            num_tables,
+            [in, count=num_nodes]    const join_node_desc_t* join_tree,
+            size_t                                            num_nodes,
+            [in, count=num_out_cols] const output_col_t*     out_cols,
+            size_t                                            num_out_cols,
+            [out]                    int32_t*                 result_count
+        );
+
+        /*
+         * ecall_decrypt_rows — verification aid, not part of the join path.
+         *
+         * Decrypts result rows in place so the harness can compare them against
+         * the SQLite reference.  The key never leaves the enclave, matching how
+         * the batching engine decrypts (CryptoUtils::decrypt_entry).  Each row
+         * must carry its own nonce and have is_encrypted set.
+         */
+        public sgx_status_t ecall_decrypt_rows(
+            [in, out, count=count] entry_t* rows,
+            size_t                          count
+        );
+    };
+
+    untrusted {
+        /*
+         * ocall_stream_result — the one big ocall.
+         *
+         * Called by the enclave to deliver a chunk of result rows.  May be
+         * called multiple times if the result is large.  Rows are AES-CTR
+         * ciphertext: the host is untrusted, so the join result is re-encrypted
+         * before it crosses the boundary.  is_encrypted and nonce stay in the
+         * clear so the host can tell rows from markers and later decrypt.
+         */
+        void ocall_stream_result(
+            [in, count=count] const entry_t* rows,
+            size_t                           count
+        );
+
+        /*
+         * ocall_get_time_ns — monotonic host timestamp for per-phase timing.
+         * Benchmarking aid only: it reveals phase boundaries to the host,
+         * which the batched original also exposes (per-ecall timing).
+         */
+        void ocall_get_time_ns(
+            [out] uint64_t* ns
+        );
+    };
+};

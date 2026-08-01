@@ -1,0 +1,15 @@
+--- a/join/enclave/oblivious_distribute.c	2025-01-23 03:37:42.000000000 -0500
++++ b/join/enclave/oblivious_distribute.c	2026-07-30 15:07:38.910876394 -0400
+@@ -61,7 +61,11 @@
+     ojoin_int_type temp2 = N / 2;
+     ojoin_int_type temp = index_start_cur + temp2;
+     for (ojoin_int_type i = 0; i < N; i++) {
+-        m2 += (index_target[i] < temp);
++        /* FIX: only entries carrying a real value have a meaningful
++         * destination index.  soj_scan_2() gives every padding entry the LAST
++         * real element's target, so counting them here inflates the left-half
++         * count and displaces a real element by one slot. */
++        m2 += (buf[i].has_value && (index_target[i] < temp));
+     };
+ 
+     if (N == 2) {

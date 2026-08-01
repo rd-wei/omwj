@@ -1,0 +1,4 @@
+# TM1/2/3 at SF 0.001 only (fastest cells first), 4 GB, daemon mode.
+test_data/queries/tpch_tm1.sql,test_data/data_0_001,4GB
+test_data/queries/tpch_tm2.sql,test_data/data_0_001,4GB
+test_data/queries/tpch_tm3.sql,test_data/data_0_001,4GB

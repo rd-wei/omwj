@@ -1,0 +1,14 @@
+SELECT *
+FROM users1, users2, users3, users4, users5, users6, users7
+WHERE users2.U2_REGTIME > users1.U1_REGTIME - 4
+AND users2.U2_REGTIME < users1.U1_REGTIME
+AND users3.U3_REGTIME > users2.U2_REGTIME - 4
+AND users3.U3_REGTIME < users2.U2_REGTIME
+AND users4.U4_REGTIME > users3.U3_REGTIME - 4
+AND users4.U4_REGTIME < users3.U3_REGTIME
+AND users5.U5_REGTIME > users4.U4_REGTIME - 4
+AND users5.U5_REGTIME < users4.U4_REGTIME
+AND users6.U6_REGTIME > users5.U5_REGTIME - 4
+AND users6.U6_REGTIME < users5.U5_REGTIME
+AND users7.U7_REGTIME > users6.U6_REGTIME - 4
+AND users7.U7_REGTIME < users6.U6_REGTIME;

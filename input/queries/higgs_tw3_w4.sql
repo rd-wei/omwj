@@ -1,0 +1,6 @@
+SELECT *
+FROM users1, users2, users3
+WHERE users1.U1_JOINDATE > users2.U2_JOINDATE - 4
+AND users1.U1_JOINDATE < users2.U2_JOINDATE
+AND users2.U2_JOINDATE > users3.U3_JOINDATE - 4
+AND users2.U2_JOINDATE < users3.U3_JOINDATE;

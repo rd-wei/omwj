@@ -1,0 +1,4 @@
+# TM1/2/3 at SF 0.01 only, 4 GB, daemon mode.
+test_data/queries/tpch_tm1.sql,test_data/data_0_01,4GB
+test_data/queries/tpch_tm2.sql,test_data/data_0_01,4GB
+test_data/queries/tpch_tm3.sql,test_data/data_0_01,4GB

@@ -1,0 +1,23 @@
+--- a/join/common/elem_t.h	2026-07-29 02:26:08.294425367 -0400
++++ b/join/common/elem_t.h	2026-07-30 04:24:59.575084047 -0400
+@@ -6,9 +6,9 @@
+ #include <stdbool.h>
+ #include <stdint.h>
+ 
+-#define ELEM_SIZE 32
+-#define ELEM_STRUCT_SIZE 19
+-#define DATA_LENGTH 14
++#define ELEM_SIZE 320
++#define ELEM_STRUCT_SIZE 307
++#define DATA_LENGTH 302
+ 
+ typedef int ojoin_int_type;
+ 
+@@ -22,6 +22,6 @@
+     int j_order;
+ } elem_t;
+ 
+-static_assert(sizeof(elem_t) == ELEM_SIZE, "Element should be 32 bytes");
++static_assert(sizeof(elem_t) == ELEM_SIZE, "Element should be 320 bytes");
+ 
+ #endif /* common/elem_t.h */

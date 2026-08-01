@@ -1,0 +1,16 @@
+<!-- Enclave configuration file -->
+<EnclaveConfiguration>
+  <ProdID>0</ProdID>
+  <ISVSVN>0</ISVSVN>
+  <!-- Stack size: 256KB -->
+  <StackMaxSize>0x40000</StackMaxSize>
+  <!-- Heap size: 128MB for processing large datasets -->
+  <HeapMaxSize>0x8000000</HeapMaxSize>
+  <!-- Thread number: 4 threads -->
+  <TCSNum>4</TCSNum>
+  <TCSPolicy>1</TCSPolicy>
+  <!-- Require SGX2 features -->
+  <DisableDebug>0</DisableDebug>
+  <MiscSelect>0</MiscSelect>
+  <MiscMask>0xFFFFFFFF</MiscMask>
+</EnclaveConfiguration>

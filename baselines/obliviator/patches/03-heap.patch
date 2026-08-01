@@ -1,0 +1,32 @@
+Size the enclave so it can actually be created on a real machine.
+
+Upstream ships NumHeapPages=36700160, i.e. a **140 GB** enclave heap.  On a
+no-EDMM kernel the whole heap is committed at enclave creation, so this either
+exceeds physical memory outright or spends many minutes paging before the first
+query runs.  It is a placeholder value, not a measured requirement: every TM
+query evaluated here fits in 4 GB.
+
+  NumHeapPages  36700160 -> 1048576   (140 GB -> 4 GB)
+  NumStackPages   262144 ->   65536   (1 GB -> 256 MB)
+
+4 GB is the same heap the single-ecall engine is given in every comparison
+(heap_4g.xml), so neither engine is handed an advantage in enclave-creation
+cost -- which is reported separately as Init, and is dominated by heap size.
+
+baselines/obliviator/run_tests.py also rewrites NumHeapPages and re-signs before
+each run, so a harness-driven campaign overrides this.  The patch matters for
+the state the build script leaves behind: without it, a freshly built enclave
+cannot be loaded at all.
+
+--- a/join/enclave/parallel.conf
++++ b/join/enclave/parallel.conf
+@@ -1,6 +1,6 @@
+ Debug=1
+-NumHeapPages=36700160
+-NumStackPages=262144
++NumHeapPages=1048576
++NumStackPages=65536
+ NumTCS=32
+ ProductID=1
+ SecurityVersion=1
+\ No newline at end of file

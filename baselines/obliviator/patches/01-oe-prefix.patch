@@ -1,0 +1,60 @@
+Make the build find OpenEnclave, at an overridable prefix.
+
+The published artifact does not build as shipped: it includes <mbedtls/error.h>
+and links -lmbedcrypto, but OpenEnclave installs mbedtls under its own 3rdparty
+tree rather than on the system include/library path, so the build stops at
+common/error.c with "mbedtls/error.h: No such file or directory".
+
+Two changes, both pointing at the same install:
+  * add $(OE_PREFIX)/include/openenclave/3rdparty to CPPFLAGS
+  * link the host against OpenEnclave's own libmbedcrypto.a instead of a
+    system -lmbedcrypto that is not present
+
+OE_PREFIX defaults to /opt/openenclave (where the open-enclave package puts it,
+and where the Dockerfile installs it); override it for a different install, e.g.
+  make OE_PREFIX=$HOME/openenclave-install
+
+-D OE_SIMULATION_CERT selects the self-signed path in enclave/mpi_tls.c instead
+of generating an attested TLS certificate.  Upstream sets exactly this flag in
+the sibling tpch_q5/our_2/Makefile of the same artifact.  Built without it, the
+host aborts during enclave setup, before any query runs -- measured here:
+
+  enclave/mpi_tls.c:358: oe_get_attestation_cert_buf_with_evidence_v2: OE_QUOTE_PROVIDER_LOAD_ERROR
+  enclave/mpi_tls.c:402: Failed to load certificate and private key
+  enclave/parallel_enc.c:47: Error initializing MPI-over-TLS
+  host/parallel.c:287: Error in enclave joining initialization
+
+i.e. it needs a provisioned DCAP quote provider.  These are single-node runs, so
+the MPI-over-TLS channel has no remote peer to attest to; the flag removes an
+attestation dependency, not a step the measured workload depends on.
+
+HOSTONLY_LDLIBS (a separate non-enclave target we never build) is left alone.
+
+--- a/join/Makefile
++++ b/join/Makefile
+@@ -48,9 +48,14 @@
+ LIBOBLIVIOUS_LIB = $(LIBOBLIVIOUS)/liboblivious.a
+ THIRD_PARTY_LIBS = $(LIBOBLIVIOUS_LIB)
+
++# OpenEnclave ships mbedtls under its own 3rdparty include tree; without this
++# the build stops at common/error.c with 'mbedtls/error.h: No such file'.
++OE_PREFIX ?= /opt/openenclave
++
+ CPPFLAGS = -I. \
+-	-I$(LIBOBLIVIOUS)/include
+-CFLAGS = -march=native -mno-avx512f -O3 -Wall -Wextra -Werror -D PRE_ALLOCATION
++	-I$(LIBOBLIVIOUS)/include \
++	-I$(OE_PREFIX)/include/openenclave/3rdparty
++CFLAGS = -march=native -mno-avx512f -O3 -Wall -Wextra -Werror -D PRE_ALLOCATION -D OE_SIMULATION_CERT
+ LDFLAGS = \
+ 	-L$(LIBOBLIVIOUS)
+ LDLIBS = \
+@@ -101,7 +106,7 @@
+ HOST_LDLIBS = \
+ 	$(shell pkg-config mpi --libs) \
+ 	$(shell pkg-config oehost-$(C_COMPILER) --libs) \
+-	-lmbedcrypto \
++	$(OE_PREFIX)/lib/openenclave/enclave/libmbedcrypto.a \
+ 	$(LDLIBS)
+
+ $(HOST_DIR)/%.o: $(HOST_DIR)/%.c

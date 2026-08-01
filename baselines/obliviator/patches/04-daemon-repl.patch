@@ -1,0 +1,271 @@
+--- a/join/host/parallel.c	2025-01-23 03:37:42.000000000 -0500
++++ b/join/host/parallel.c	2026-07-07 14:19:25.246442027 -0400
+@@ -3,6 +3,7 @@
+ #include <stddef.h>
+ #include <stdio.h>
+ #include <stdlib.h>
++#include <string.h>
+ #include <time.h>
+ #include <mpi.h>
+ #include "common/error.h"
+@@ -15,7 +16,12 @@
+ #include "host/parallel_u.h"
+ #endif /* DISTRUBTED_SGX_SORT_HOSTONLY */
+ 
+-#define MAX_BUF_SIZE 1073741824
++/* I/O + marshalling buffer; must hold the larger of a join's input file and
++ * its output text. The EDL marshals the whole buffer into the enclave per
++ * ecall, so this is a floor on required enclave heap. Overridable via the
++ * OBLIVIATOR_MAX_BUF env var (bytes). */
++#define DEFAULT_MAX_BUF_SIZE 268435456
++static size_t max_buf_size = DEFAULT_MAX_BUF_SIZE;
+ 
+ static int world_rank;
+ static int world_size;
+@@ -23,6 +29,16 @@
+ FILE *input_file;
+ FILE *output_file;
+ 
++/* Per-section timing (seconds). enclave_init_seconds is set once during main
++ * init and emitted only on the first join; subsequent joins emit 0. */
++static double enclave_init_seconds = 0.0;
++static int enclave_init_emitted = 0;
++
++static inline double ts_diff_sec(const struct timespec *a, const struct timespec *b) {
++    return (double)(b->tv_sec - a->tv_sec)
++         + (double)(b->tv_nsec - a->tv_nsec) / 1e9;
++}
++
+ static int init_mpi(int *argc, char ***argv) {
+     int ret;
+ 
+@@ -76,27 +92,46 @@
+ #endif
+     int ret;
+ 
+-    struct timespec start;
+-    ret = timespec_get(&start, TIME_UTC);
++    struct timespec t_pre_start, t_ecall_start, t_ecall_end, t_post_end;
++    ret = timespec_get(&t_pre_start, TIME_UTC);
+     if (!ret) {
+         perror("starting timespec_get");
+         goto exit_free_arr;
+     }
+ 
+-char *buf = (char *)malloc(MAX_BUF_SIZE);
+-ret = fread(buf, 1, MAX_BUF_SIZE, input_file);
++    fseek(input_file, 0, SEEK_END);
++    long input_size = ftell(input_file);
++    rewind(input_file);
++    if (input_size < 0 || (size_t)input_size >= max_buf_size) {
++        handle_error_string("input (%ld bytes) does not fit in buffer (%zu); "
++                "raise OBLIVIATOR_MAX_BUF", input_size, max_buf_size);
++        fclose(input_file);
++        fclose(output_file);
++        ret = -1;
++        goto exit_free_arr;
++    }
++
++char *buf = (char *)malloc(max_buf_size);
++ret = fread(buf, 1, max_buf_size, input_file);
+ fclose(input_file);
+ 
++    if (!timespec_get(&t_ecall_start, TIME_UTC)) {
++        perror("ecall_start timespec_get");
++    }
++
+ #ifndef DISTRIBUTED_SGX_SORT_HOSTONLY
+ 
+-    result = ecall_scalable_oblivious_join(enclave, &ret, buf, MAX_BUF_SIZE);
+-   
++    result = ecall_scalable_oblivious_join(enclave, &ret, buf, max_buf_size);
++
+     if (result != OE_OK) {
+         goto exit_free_arr;
+     }
+ #else /* DISTRIBUTED_SGX_SORT_HOSTONLY */
+-            ret = ecall_scalable_oblivious_join(buf, MAX_BUF_SIZE);
++            ret = ecall_scalable_oblivious_join(buf, max_buf_size);
+ #endif /* DISTRIBUTED_SGX_SORT_HOSTONLY */
++    if (!timespec_get(&t_ecall_end, TIME_UTC)) {
++        perror("ecall_end timespec_get");
++    }
+     if (ret) {
+         handle_error_string("Enclave exited with return code %d", ret);
+         goto exit_free_arr;
+@@ -107,11 +142,18 @@
+     free(buf);
+     MPI_Barrier(MPI_COMM_WORLD);
+ 
+-    struct timespec end;
+-    ret = timespec_get(&end, TIME_UTC);
+-    if (!ret) {
+-        perror("ending timespec_get");
+-        goto exit_free_arr;
++    if (!timespec_get(&t_post_end, TIME_UTC)) {
++        perror("post_end timespec_get");
++    }
++
++    {
++        double host_pre = ts_diff_sec(&t_pre_start, &t_ecall_start);
++        double in_enclave = ts_diff_sec(&t_ecall_start, &t_ecall_end);
++        double host_post = ts_diff_sec(&t_ecall_end, &t_post_end);
++        double init_to_emit = enclave_init_emitted ? 0.0 : enclave_init_seconds;
++        enclave_init_emitted = 1;
++        printf("TIMING enclave_init=%f host_pre=%f in_enclave=%f host_post=%f\n",
++                init_to_emit, host_pre, in_enclave, host_post);
+     }
+ 
+ exit_free_arr:
+@@ -127,19 +169,64 @@
+     return ret;
+ }
+ 
++#ifndef DISTRIBUTED_SGX_SORT_HOSTONLY
++static int process_input_path(oe_enclave_t *enclave, const char *path) {
++#else
++static int process_input_path(enum algorithm_type algorithm_type, const char *path) {
++#endif
++    size_t path_len = strlen(path);
++    if (path_len < 5) {
++        printf("ERROR: path too short (need .txt suffix): %s\n", path);
++        return -1;
++    }
++    input_file = fopen(path, "rb");
++    if (!input_file) {
++        printf("ERROR: cannot open input %s\n", path);
++        return -1;
++    }
++    char *output_file_path = calloc(path_len + 8, sizeof(*output_file_path));
++    memcpy(output_file_path, path, path_len - 4);
++    memcpy(output_file_path + path_len - 4, "_output.txt", 12);
++    output_file = fopen(output_file_path, "w");
++    free(output_file_path);
++    if (!output_file) {
++        printf("ERROR: cannot open output for %s\n", path);
++        fclose(input_file);
++        return -1;
++    }
++#ifndef DISTRIBUTED_SGX_SORT_HOSTONLY
++    return time_join(enclave);
++#else
++    return time_join(algorithm_type);
++#endif
++}
++
+ int main(int argc, char **argv) {
+     int ret = -1;
+ 
+ #ifndef DISTRIBUTED_SGX_SORT_HOSTONLY
+-    if (argc < 4) {
+-        printf("usage: %s enclave_image num_threads input_file_path\n", argv[0]);
+-#else /* DISTRIBUTED_SGX_SORT_HOSTONLY */
+     if (argc < 3) {
+-        printf("usage: %s num_threads input_file_path\n", argv[0]);
++        printf("usage: %s enclave_image num_threads [input_file_path ...]\n", argv[0]);
++        printf("       If no input files given, reads paths from stdin (one per line, 'EXIT' to quit).\n");
++#else /* DISTRIBUTED_SGX_SORT_HOSTONLY */
++    if (argc < 2) {
++        printf("usage: %s num_threads [input_file_path ...]\n", argv[0]);
++        printf("       If no input files given, reads paths from stdin (one per line, 'EXIT' to quit).\n");
+ #endif /* DISTRIBUTED_SGX_SORT_HOSTONLY */
+         return 0;
+     }
+     
++    const char *buf_env = getenv("OBLIVIATOR_MAX_BUF");
++    if (buf_env) {
++        errno = 0;
++        size_t v = strtoull(buf_env, NULL, 10);
++        if (errno || !v) {
++            printf("Invalid OBLIVIATOR_MAX_BUF: %s\n", buf_env);
++            return ret;
++        }
++        max_buf_size = v;
++    }
++
+     errno = 0;
+ #ifndef DISTRIBUTED_SGX_SORT_HOSTONLY
+     size_t num_threads = strtoll(argv[2], NULL, 10);
+@@ -162,6 +249,11 @@
+         goto exit_mpi_finalize;
+     }
+ 
++    struct timespec t_init_start, t_init_end;
++    if (!timespec_get(&t_init_start, TIME_UTC)) {
++        perror("init_start timespec_get");
++    }
++
+ #ifndef DISTRIBUTED_SGX_SORT_HOSTONLY
+     oe_enclave_t *enclave;
+     oe_result_t result;
+@@ -208,35 +300,45 @@
+         }
+     }
+ 
+-    for (int i = 3; i < argc; i++) {
+-        input_file = fopen(argv[i], "rb");
+-        char *output_file_path = calloc(strlen(argv[i]) + 8, sizeof(*output_file_path));
+-        for (size_t u = 0; u < strlen(argv[i]) - 4; u++) {
+-            output_file_path[u] = argv[i][u];
+-        }
+-        output_file_path[strlen(argv[i]) - 4] = '_';
+-        output_file_path[strlen(argv[i]) - 3] = 'o';
+-        output_file_path[strlen(argv[i]) - 2] = 'u';
+-        output_file_path[strlen(argv[i]) - 1] = 't';
+-        output_file_path[strlen(argv[i])] = 'p';
+-        output_file_path[strlen(argv[i]) + 1] = 'u';
+-        output_file_path[strlen(argv[i]) + 2] = 't';
+-        output_file_path[strlen(argv[i]) + 3] = '.';
+-        output_file_path[strlen(argv[i]) + 4] = 't';
+-        output_file_path[strlen(argv[i]) + 5] = 'x';
+-        output_file_path[strlen(argv[i]) + 6] = 't';
+-        output_file_path[strlen(argv[i]) + 7] = '\0';
+-        output_file = fopen(output_file_path, "w");
+-        if (!output_file) {
+-            printf("Invalid OUTPUT FILE\n");
+-            return 0;
++    if (!timespec_get(&t_init_end, TIME_UTC)) {
++        perror("init_end timespec_get");
++    }
++    enclave_init_seconds = ts_diff_sec(&t_init_start, &t_init_end);
++
++#ifndef DISTRIBUTED_SGX_SORT_HOSTONLY
++    int batch_start = 3;
++#else
++    int batch_start = 2;
++#endif
++    if (argc > batch_start) {
++        /* Batch mode: process each input file from argv. */
++        for (int i = batch_start; i < argc; i++) {
++#ifndef DISTRIBUTED_SGX_SORT_HOSTONLY
++            ret = process_input_path(enclave, argv[i]);
++#else
++            ret = process_input_path(algorithm_type, argv[i]);
++#endif
+         }
++    } else {
++        /* Daemon mode: read input paths from stdin, one per line. */
++        setvbuf(stdout, NULL, _IONBF, 0);
++        printf("READY\n");
++        char line[4096];
++        while (fgets(line, sizeof(line), stdin)) {
++            line[strcspn(line, "\r\n")] = '\0';
++            if (line[0] == '\0') {
++                continue;
++            }
++            if (strcmp(line, "EXIT") == 0) {
++                break;
++            }
+ #ifndef DISTRIBUTED_SGX_SORT_HOSTONLY
+-        ret = time_join(enclave);
++            ret = process_input_path(enclave, line);
+ #else
+-        ret = time_join(algorithm_type);
++            ret = process_input_path(algorithm_type, line);
+ #endif
+-
++            printf("==DONE ret=%d==\n", ret);
++        }
+     }
+ 
+ #ifndef DISTRIBUTED_SGX_SORT_HOSTONLY

@@ -1,0 +1,10 @@
+# tm3 join-order sensitivity: the 5-table chain has 14 connected binary plans
+# (Catalan(4)), and OBLIVIATOR ships no planner -- so the plan comes entirely
+# from this harness.  Run with --plan-mode {leftdeep,optimal,random,average}.
+#
+# Needs DATA_LENGTH >= 299 at scale 0.01 (the widest plan's payload is 298
+# chars; left-deep only needs 220, which is why a build sized from left-deep
+# runs silently truncates the others).  run_plan_modes.py checks this and
+# aborts rather than reporting corrupted results.
+test_data/queries/tpch_tm3.sql,test_data/data_0_001,4GB
+test_data/queries/tpch_tm3.sql,test_data/data_0_01,4GB

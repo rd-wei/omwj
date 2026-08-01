@@ -1,0 +1,11 @@
+TREE_VARIANT: 0 of 4 (root=rpath)
+query: input/queries/dangling_path.sql
+tables (3): rpath(10100) spath(10100) tpath(10100)
+total rows: 30300
+join tree nodes: 3
+output columns: 6
+ENCLAVE_INIT: 0.736 s
+PHASE_TIMING(enclave): decrypt=0.001 bottom_up=0.031 top_down=0.031 distribute_expand=0.007 align_concat=0.000 output_stream=0.000 total=0.070 (s)
+PEAK_HEAP: 11.69 MiB (11969 KiB)
+ECALL_TOTAL: 0.073 s
+result: 100 rows written to output/runs/results/ra_dangling_path.csv

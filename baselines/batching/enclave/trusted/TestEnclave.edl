@@ -1,0 +1,50 @@
+enclave {
+    include "enclave_types.h"
+    
+    from "sgx_tstdc.edl" import *;
+    
+    trusted {
+        /* Test ecalls for measuring overhead components */
+        
+        // Pure no-op - measures SGX transition overhead only
+        public void ecall_test_noop(void);
+        
+        // No-op with small data - measures transition + small marshalling
+        public void ecall_test_noop_small([in, size=size] void* data, size_t size);
+        
+        // No-op with in/out data - measures bidirectional marshalling
+        public void ecall_test_noop_inout([in, out, size=size] void* data, size_t size);
+        
+        // No-op with entry array - similar to real workload data structure
+        public void ecall_test_noop_entries([in, out, count=count] entry_t* entries, size_t count);
+        
+        // Simple computation (sum) on data - measures computation overhead
+        public int32_t ecall_test_sum_array([in, size=size] int32_t* data, size_t size);
+        
+        // Simple entry processing - touch each entry once
+        public void ecall_test_touch_entries([in, out, count=count] entry_t* entries, size_t count);
+        
+        // Entry processing with simple operation (increment join_attr)
+        public void ecall_test_increment_entries([in, out, count=count] entry_t* entries, size_t count);
+        
+        /* Crypto and operation breakdown tests */
+        
+        // Decrypt entries only (no re-encryption)
+        public void ecall_test_decrypt_only([in, out, count=count] entry_t* entries, size_t count);
+        
+        // Encrypt entries only
+        public void ecall_test_encrypt_only([in, out, count=count] entry_t* entries, size_t count);
+        
+        // Decrypt and do comparisons, but don't re-encrypt
+        public void ecall_test_decrypt_and_compare([in, out, count=count] entry_t* entries, size_t count);
+        
+        // Just do comparisons on plaintext entries
+        public void ecall_test_compare_only([in, out, count=count] entry_t* entries, size_t count);
+        
+        // Full cycle: decrypt, compare, re-encrypt
+        public void ecall_test_full_cycle([in, out, count=count] entry_t* entries, size_t count);
+        
+        // Test with varying percentages of encrypted entries
+        public void ecall_test_mixed_encryption([in, out, count=count] entry_t* entries, size_t count, int32_t encrypt_percent);
+    };
+};

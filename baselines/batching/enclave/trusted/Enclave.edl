@@ -1,0 +1,120 @@
+enclave {
+    include "../../common/enclave_types.h"
+    include "../../common/entry_crypto.h"
+    
+    from "sgx_tstdc.edl" import *;
+    from "TestEnclave.edl" import *;
+    
+    trusted {
+        /* Essential ecalls only - all other operations go through batch dispatcher */
+        
+        /* AES-CTR Encryption/Decryption functions */
+        /* The encryption key is stored securely inside the enclave and never exposed */
+        /* Uses AES-128 in CTR mode with unique nonce for each encryption */
+        
+        // Encrypt/decrypt single entry using secure enclave-only key
+        // Used for file I/O and debug operations
+        public crypto_status_t ecall_encrypt_entry([in,out] entry_t* entry);
+        public crypto_status_t ecall_decrypt_entry([in,out] entry_t* entry);
+        
+        // Get output size from last entry
+        public void ecall_obtain_output_size([out] int32_t* retval, [in] const entry_t* entry);
+        
+        // ============================================================================
+        // Batch Operations - Primary interface for all transform/window/comparator ops
+        // ============================================================================
+        
+        // Batch dispatcher for executing multiple operations in a single ecall
+        // This is the main interface for 36+ different operations that were previously
+        // individual ecalls. Dramatically reduces SGX transition overhead.
+        // ops_array is passed as byte buffer with size in bytes
+        public void ecall_batch_dispatcher([in, out, count=data_count] entry_t* data_array, size_t data_count,
+                                          [in, size=ops_size] void* ops_array, size_t ops_count, size_t ops_size,
+                                          int32_t op_type);
+        
+        // ============================================================================
+        // Merge Sort Operations
+        // ============================================================================
+        
+        // Heap sort an array in-place
+        public sgx_status_t ecall_heap_sort([in,out,count=size] entry_t* array, size_t size, int comparator_type);
+        
+        // Initialize k-way merge state
+        public sgx_status_t ecall_k_way_merge_init(size_t k, int comparator_type);
+        
+        // Process k-way merge (stateful)
+        public sgx_status_t ecall_k_way_merge_process([out,count=output_capacity] entry_t* output, 
+                                                      size_t output_capacity,
+                                                      [out] size_t* output_produced,
+                                                      [out] int* merge_complete);
+        
+        // Clean up k-way merge state
+        public sgx_status_t ecall_k_way_merge_cleanup(void);
+        
+        // ============================================================================
+        // Oblivious Shuffle Operations
+        // ============================================================================
+        
+        // Oblivious 2-way Waksman shuffle (in-memory)
+        public sgx_status_t ecall_oblivious_2way_waksman([in,out,count=n] entry_t* data, size_t n);
+        
+        // K-way shuffle decomposition for large vectors
+        public sgx_status_t ecall_k_way_shuffle_decompose([in,count=n] entry_t* input, size_t n);
+        
+        // K-way shuffle reconstruction for large vectors
+        public sgx_status_t ecall_k_way_shuffle_reconstruct(size_t n);
+
+        // ============================================================================
+        // AKS Oblivious Distribute
+        // ============================================================================
+
+        // Route n entries so that entry with dst_idx==k ends up at position k.
+        // Runs the full AKS recursive distribute in one enclave call.
+        // n must be <= MAX_BATCH_SIZE.
+        public sgx_status_t ecall_distribute_small([in,out,count=n] entry_t* data, size_t n);
+
+        // Full AKS recursive distribute for arbitrary n.
+        // Data lives in untrusted memory; enclave fetches/stores via ocalls.
+        public sgx_status_t ecall_aks_distribute_large(size_t n);
+
+        // Micro-benchmark: decrypt then re-encrypt n entries in-place.
+        // Used to measure raw AES throughput inside the enclave.
+        public void ecall_aes_benchmark([in,out,count=n] entry_t* data, size_t n);
+    };
+
+    untrusted {
+        /* Debug output ocall for enclave debugging */
+        void ocall_debug_print(uint32_t level, [in, string] const char* file,
+                              int line, [in, string] const char* message);
+
+        /* Merge sort buffer management */
+        void ocall_refill_buffer(int buffer_idx,
+                                [out,count=buffer_size] entry_t* buffer,
+                                size_t buffer_size,
+                                [out] size_t* actual_filled);
+
+        /* K-way shuffle buffered data transfer */
+        void ocall_flush_to_group(int group_idx,
+                                 [in,count=buffer_size] entry_t* buffer,
+                                 size_t buffer_size);
+        void ocall_refill_from_group(int group_idx,
+                                    [out,count=buffer_size] entry_t* buffer,
+                                    size_t buffer_size,
+                                    [out] size_t* actual_filled);
+        void ocall_flush_output([in,count=buffer_size] entry_t* buffer,
+                               size_t buffer_size);
+
+        /* AKS large distribute: fetch/store chunks of the flat array */
+        /* Scan phase: read-only pass to count m2 (separate for timing). */
+        void ocall_aks_read_scan_flat(size_t offset,
+                                      [out,count=count] entry_t* buf,
+                                      size_t count);
+        /* Swap phase: read + write pairs. */
+        void ocall_aks_read_flat(size_t offset,
+                                 [out,count=count] entry_t* buf,
+                                 size_t count);
+        void ocall_aks_write_flat(size_t offset,
+                                  [in,count=count] entry_t* buf,
+                                  size_t count);
+    };
+};

@@ -1,0 +1,4 @@
+SELECT *
+FROM users1, users2
+WHERE users2.U2_REGTIME > users1.U1_REGTIME - 4
+AND users2.U2_REGTIME < users1.U1_REGTIME;
