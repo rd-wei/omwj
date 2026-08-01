@@ -1,0 +1,30 @@
+# Keep the build context small and free of stale artifacts so the in-image
+# `make` compiles cleanly from source.  The committed input/ data IS needed and
+# is intentionally not excluded.
+.git
+.gitignore
+
+# Compiled objects / libraries / generated edge routines
+*.o
+*.a
+*.so
+*_t.c
+*_t.h
+*_u.c
+*_u.h
+
+# Built binaries
+sgx_join
+decrypt_result
+
+# Run outputs and scratch
+output/
+debug/
+traces/
+*.log
+*.tmp
+
+# Editor cruft
+*.swp
+*~
+.DS_Store

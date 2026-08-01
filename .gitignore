@@ -1,0 +1,34 @@
+# Build artifacts
+*.o
+*.d
+*.so
+enclave.signed.so
+enclave/untrusted/Enclave_u.c
+enclave/untrusted/Enclave_u.h
+enclave/trusted/Enclave_t.c
+enclave/trusted/Enclave_t.h
+baselines/batching/enclave/untrusted/Enclave_u.c
+baselines/batching/enclave/untrusted/Enclave_u.h
+baselines/batching/enclave/trusted/Enclave_t.c
+baselines/batching/enclave/trusted/Enclave_t.h
+
+# Binaries.  ANCHORED with a leading slash on purpose: a bare "sgx_join" also
+# matches the DIRECTORY baselines/batching/main/sgx_join/, which silently drops
+# that engine's main.cpp from the repo and leaves a tree whose own Makefile
+# cannot build it.  (The batching engine arrived here with exactly that bug, via
+# a bare "debug/" rule swallowing app/debug/.)
+/sgx_join
+/sgx_app
+/decrypt_result
+/test_query_parser
+/test_table_reader
+/test_join_tree_serializer
+/baselines/batching/sgx_app
+/baselines/batching/encrypt_tables
+
+# Run outputs and fetched baselines
+output/
+external/
+higgs-data/
+baselines/obliviator/query_results/
+__pycache__/
