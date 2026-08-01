@@ -14,7 +14,11 @@ PLAIN="input/plaintext/data_${SCALE}"
 OUT_DIR="output"
 mkdir -p "$OUT_DIR"
 
-QUERIES="tpch_tm1 tpch_tm2 tpch_tm3"
+# tpch_bm1 is the band-join regression guard: a 5-way join whose last predicate
+# is a BAND against `part`, so it exercises the NEQ boundary logic in the align
+# comparator on a multi-way shape.  Keep it in whenever sorts or comparators are
+# touched -- the equality queries alone will not catch a boundary-off-by-one.
+QUERIES="tpch_tm1 tpch_tm2 tpch_tm3 tpch_bm1"
 FAILED=0
 
 for q in $QUERIES; do

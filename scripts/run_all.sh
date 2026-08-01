@@ -60,15 +60,19 @@ if [ "${QUICK:-0}" = "1" ]; then
     [ "$fail" -eq 0 ] && { echo "QUICK CHECK PASSED"; exit 0; } || { echo "QUICK CHECK FAILED"; exit 1; }
 fi
 
-# TM1/TM2/TM3 are the TPC-H multi-way joins the paper reports; nothing else
-# ships, so nothing else runs here.
+# TPC-H coverage: TM1/TM2/TM3 are the multi-way equality joins; TB1/TB2 are
+# binary BAND joins over pre-aliased self-join tables (supplier1/2, part1/2).
+# The band pair matters as a shape the equality queries cannot exercise -- it
+# drives the NEQ boundary logic in the align comparator directly.
 #
-# tm3 at scale 0.1 does not complete within 2 h at a 16 GB heap (no OOM was
-# observed -- see REPRODUCE.md "Known limits"), so it is left out of the default
-# 0.1 run rather than reporting a failure the evaluator cannot act on.
+# Two cells are excluded from the 0.1 run rather than reported as failures the
+# evaluator cannot act on:
+#   tm3 @ 0.1  did not complete in 2 h at a 16 GB heap, no OOM observed
+#   tb2 @ 0.1  ~200 M output rows -- infeasible for both engines, by cardinality
+# See REPRODUCE.md "Known limits".
 case "$SCALE" in
-    0_1) QUERIES="tpch_tm1 tpch_tm2" ;;
-    *)   QUERIES="tpch_tm1 tpch_tm2 tpch_tm3" ;;
+    0_1) QUERIES="tpch_tm1 tpch_tm2 tpch_tb1" ;;
+    *)   QUERIES="tpch_tm1 tpch_tm2 tpch_tm3 tpch_tb1 tpch_tb2" ;;
 esac
 
 echo "=== Correctness suite (scale ${SCALE}, verified vs SQLite) ==="

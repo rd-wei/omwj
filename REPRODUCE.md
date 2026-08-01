@@ -174,7 +174,8 @@ Everything shipped, and what invokes it. Nothing here is dead code.
 |---|---|
 | `tests/e2e_sqlite_compare.py` | the tuple-exact multiset comparison everything else calls; decrypts encrypted results first |
 | `decrypt_result` (built by `make`) | round-trips an encrypted result CSV back through the enclave; reads **either** engine's output |
-| `scripts/run_e2e_tests.sh` | standalone correctness suite over all TPC-H test queries |
+| `scripts/run_e2e_tests.sh` | standalone correctness suite over all TPC-H test queries (TM1-3 + BM1) |
+| `scripts/bm1_width_series.sh` | BM1 band-width sweep, W ∈ {100, 400, 1000, 10000} |
 | `scripts/retro_verify.sh` | verify result CSVs already on disk, no enclave run |
 | `scripts/backfill_verify.py` | fill the verdict column into older `*_variants.tsv` |
 

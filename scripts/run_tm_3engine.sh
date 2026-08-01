@@ -34,6 +34,12 @@ cd "$(dirname "$0")/.."
 SGX_MODE="${SGX_MODE:-HW}"
 SCALE="${SCALE:-0_001}"
 REPS="${REPS:-3}"
+# Overridable so the TPC-H BAND joins can be measured through the same driver:
+#   QUERIES="tpch_tb1 tpch_tb2" scripts/run_tm_3engine.sh
+#   QUERIES="tpch_bm1" scripts/run_tm_3engine.sh
+# OBLIVIATOR is skipped automatically for any band query -- it implements binary
+# EQUALITY joins only and cannot express a band predicate at all.
+QUERIES="${QUERIES:-tpch_tm1 tpch_tm2 tpch_tm3}"
 LOG="${EJ_LOG_DIR:-output/runs/logs}"
 mkdir -p "$LOG"
 SUMMARY="$LOG/tm_3engine_${SCALE}.log"
@@ -52,7 +58,7 @@ say ""
 
 # ---------------------------------------------------------------- 1. ours
 say "######## single-ecall"
-for q in tpch_tm1 tpch_tm2 tpch_tm3; do
+for q in $QUERIES; do
     for r in $(seq 1 "$REPS"); do
         OUT="${EJ_RESULT_DIR:-output/runs/results}/${q}_${SCALE}_se_r${r}.csv"
         mkdir -p "$(dirname "$OUT")"
@@ -80,7 +86,7 @@ BATCH="${BATCHING_SRC:-baselines/batching}"
 if [ ! -x "$BATCH/sgx_app" ]; then
     say "  SKIPPED -- not built.  Run: baselines/build_batching.sh"
 else
-    for q in tpch_tm1 tpch_tm2 tpch_tm3; do
+    for q in $QUERIES; do
         for r in $(seq 1 "$REPS"); do
             OUT="$PWD/${EJ_RESULT_DIR:-output/runs/results}/${q}_${SCALE}_ba_r${r}.csv"
             L="$LOG/${q}_${SCALE}_ba_r${r}.log"
@@ -115,6 +121,16 @@ elif [ ! -x "$OBL/join/host/parallel" ]; then
 else
     ELEM=$(grep -oP '#define ELEM_SIZE \K[0-9]+' "$OBL/join/common/elem_t.h" 2>/dev/null)
     say "  ELEM_SIZE=$ELEM  OBLIVIATOR_FIX=${OBLIVIATOR_FIX:-0}"
+    # Its harness is driven by a per-scale config listing the TM equality
+    # queries; a band query has no entry there and could not run anyway.
+    case "$QUERIES" in
+        *tb1*|*tb2*|*bm1*)
+            say "  SKIPPED for band queries -- OBLIVIATOR implements binary"
+            say "  EQUALITY joins only, so tb1/tb2/bm1 cannot be expressed for it."
+            say ""
+            say "summary: $SUMMARY"
+            exit 0 ;;
+    esac
     CFG="baselines/obliviator/configs/test_config_tm123_${SCALE}.txt"
     if [ -f "$CFG" ]; then
         ( cd baselines/obliviator && OBLIVIATOR_SRC="$PWD/../../$OBL" \

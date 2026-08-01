@@ -14,6 +14,7 @@ on real-data multi-way **band** joins.
 | workload | engines | why |
 |---|---|---|
 | **TM** (TPC-H TM1/TM2/TM3) | all **three** | equality joins, which all three can express |
+| **TB / BM** (TPC-H band joins: TB1, TB2, BM1) | **two** | band predicates — see below |
 | **Higgs** (band joins, k = 3…9) | **two** | OBLIVIATOR implements binary *equality* joins only, so these queries cannot be written for it at all |
 
 | tier | engines | what you get |
