@@ -8,9 +8,12 @@ machine.
 | **SIM** | any x86-64 | single-ecall, batching | minutes |
 | **HW** | real SGX (Azure DCsv3, or a local SGX box) | all three | hours for the full campaigns |
 
-> **Apple Silicon:** use a full x86-64 VM, **not** Docker/Rosetta. Intel's
-> precompiled SIM libraries use AVX and `rdrand`, which SIGILL under Rosetta.
-> That is a limitation of the Intel SDK, not of this code.
+> **Apple Silicon:** run Docker inside a full x86-64 VM (e.g. `colima start
+> --profile x86 --arch x86_64`), not on the default arm64 backend under Rosetta.
+> Intel's precompiled SIM libraries use AVX and `rdrand`, which SIGILL under
+> Rosetta -- a limitation of the Intel SDK, not of this code. The
+> `--platform linux/amd64` in the commands below is harmless and correct once you
+> are inside such a VM; it is not a substitute for one.
 
 ---
 
@@ -26,9 +29,12 @@ docker run --platform linux/amd64 --rm -e SCALE=0_01 omwj-sim
 Every query is checked tuple-exact against SQLite. A non-zero exit means a real
 mismatch, not a timing wobble.
 
-**OBLIVIATOR does not appear in this tier.** `oe_create_parallel_enclave` is
-called with `flags=0` upstream — there is no simulation path — so it needs real
-SGX. `scripts/run_tm_3engine.sh` says so explicitly rather than silently
+**OBLIVIATOR does not appear in this tier,** and the default build omits its
+toolchain accordingly. `oe_create_parallel_enclave` is called with `flags=0`
+upstream — there is no simulation path — so it needs real SGX. Pass
+`--build-arg WITH_OBLIVIATOR=1` to add OpenEnclave for the three-engine HW tier;
+be aware that Microsoft publishes `open-enclave` for Ubuntu 20.04 and not for the
+22.04 base pinned here, so that layer does not currently install. `scripts/run_tm_3engine.sh` says so explicitly rather than silently
 producing a two-engine table that looks like a three-engine one.
 
 ## 2. HW — timings
@@ -135,8 +141,15 @@ TPC-H **SF 0.001 and 0.01 ship** (plaintext and encrypted). **SF 0.1 is
 regenerate-only** — the TPC-H generator is licensed and not redistributable:
 
 ```bash
-DBGEN_DIR=/path/to/tpch-dbgen scripts/gen_all_data.sh
+DBGEN_DIR=/path/to/tpch-dbgen scripts/gen_all_data.sh 0.1
 ```
+
+Name the scale. With no argument the script would target all three, and it
+refuses the two that ship: dbgen's string columns depend on its text pool, so
+regenerated plaintext will not match the committed ciphertext for the same
+scale, and the suite would fail with correct row counts and mismatched values.
+Pass `FORCE=1` to override, which drops the stale ciphertext so the plaintext
+fallback below applies.
 
 Regenerated scales are plaintext-only; the drivers detect that and use the
 plaintext directory for both input and ground truth.

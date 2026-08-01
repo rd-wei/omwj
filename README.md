@@ -33,6 +33,12 @@ docker run --platform linux/amd64 --rm omwj-sim          # correctness suite
 docker run --platform linux/amd64 --rm -e QUICK=1 omwj-sim   # ~30 s smoke test
 ```
 
+The default build is the **two-engine SIM image** (our single-ecall engine and the
+batching baseline). OBLIVIATOR is not in it: upstream has no simulation path, so it
+needs real SGX. Add it with `--build-arg WITH_OBLIVIATOR=1`, which also pulls in
+OpenEnclave — note that Microsoft ships `open-enclave` for Ubuntu 20.04 but not for
+the 22.04 base this image pins, so that layer currently fails to install.
+
 On SGX hardware, for timings:
 
 ```bash

@@ -11,7 +11,8 @@
 # Build args:
 #   SGX_MODE         SIM | HW  (default SIM -- correctness anywhere, no SGX device)
 #   VECTORIZE        off | on  (default off -- SIM is Rosetta/QEMU-safe, no AVX2)
-#   WITH_OBLIVIATOR  1 | 0     (default 1 -- 0 omits OpenEnclave, smaller image)
+#   WITH_OBLIVIATOR  0 | 1     (default 0 -- 1 adds OpenEnclave for the OBLIVIATOR
+#                              baseline, which needs real SGX; see the NOTE below)
 #
 # ---- SIM (default): correctness on any x86, incl. Apple Silicon emulation ----
 #   docker build -t omwj-sim .
@@ -75,9 +76,15 @@ ENV LD_LIBRARY_PATH="${SGX_SDK}/sdk_libs"
 #
 # NOTE: OBLIVIATOR has no simulation path upstream -- oe_create_parallel_enclave
 # is called with flags=0 -- so it runs only on real SGX.  The SIM tier therefore
-# compares two engines; see REPRODUCE.md.  Pass --build-arg WITH_OBLIVIATOR=0
-# for a smaller image that skips this layer.
-ARG WITH_OBLIVIATOR=1
+# compares two engines; see REPRODUCE.md.  Pass --build-arg WITH_OBLIVIATOR=1
+# to add this layer for the HW three-engine tier.
+#
+# The default is 0 deliberately.  Microsoft publishes open-enclave for Ubuntu
+# 20.04 (focal) but not for 22.04 (jammy), which this image pins, so the layer
+# below fails with "E: Unable to locate package open-enclave" on any machine.
+# Defaulting it on would break `docker build -t omwj-sim .` for every SIM
+# reviewer over a dependency the SIM tier cannot use.
+ARG WITH_OBLIVIATOR=0
 ENV OE_PREFIX=/opt/openenclave
 RUN if [ "${WITH_OBLIVIATOR}" = "1" ]; then \
         mkdir -p /etc/apt/keyrings \

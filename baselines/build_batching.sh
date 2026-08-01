@@ -54,7 +54,7 @@ Queries and data from this artifact can be passed by absolute path, e.g.:
   cd "$SRC" && ./sgx_app "$(pwd)/input/queries/higgs_tw4_w4.sql" \\
       "$(pwd)/input/plaintext/higgs_1d" /tmp/out.csv
 
-Its result is written as ciphertext (save_encrypted_csv), so verification checks
-schema and cardinality only -- see the ENCRYPTED verdict in
-tests/e2e_sqlite_compare.py.
+Its result is written as ciphertext (save_encrypted_csv); tests/e2e_sqlite_compare.py
+round-trips it through decrypt_result and compares tuple-exact against SQLite, the
+same check the single-ecall engine gets.
 EOF

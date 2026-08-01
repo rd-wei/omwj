@@ -31,11 +31,33 @@ DBGEN="$DBGEN_DIR/dbgen"
 
 SCALES="${*:-0.001 0.01 0.1}"
 
+# Regenerating a scale that ships is a trap: dbgen's string columns depend on its
+# text pool, so regenerated plaintext does not match the committed
+# input/encrypted/ for the same scale.  The engine reads the encrypted copy and
+# SQLite reads the plaintext one, so the suite then fails with correct row counts
+# and mismatched values -- a confusing failure with no obvious cause.  Refuse
+# unless FORCE=1, in which case drop the stale ciphertext so run_all.sh falls
+# back to plaintext instead of comparing two different datasets.
+for sf in $SCALES; do
+    us="${sf/./_}"
+    if [ -d "$ROOT/input/encrypted/data_${us}" ] && [ "${FORCE:-0}" != "1" ]; then
+        echo "ERROR: scale ${sf} ships with this artifact and has encrypted data at" >&2
+        echo "       input/encrypted/data_${us}. Regenerating the plaintext would" >&2
+        echo "       desynchronise the two and break the correctness suite." >&2
+        echo "       Re-run with FORCE=1 to regenerate and drop the stale ciphertext." >&2
+        exit 1
+    fi
+done
+
 for sf in $SCALES; do
     us="${sf/./_}"                     # 0.001 -> 0_001
     out="$ROOT/input/plaintext/data_${us}"
     tmp="$(mktemp -d)"
     echo "=== scale ${sf} -> ${out} ==="
+    if [ -d "$ROOT/input/encrypted/data_${us}" ]; then
+        echo "    FORCE=1: removing now-stale input/encrypted/data_${us}"
+        rm -rf "$ROOT/input/encrypted/data_${us}"
+    fi
     # dbgen must run from its own directory (needs dists.dss); DSS_PATH sends
     # the .tbl output to our temp dir.
     ( cd "$DBGEN_DIR" && rm -f ./*.tbl && DSS_PATH="$tmp" ./dbgen -s "$sf" -f -b "$DBGEN_DIR/dists.dss" )
